@@ -26,7 +26,7 @@
   "Icon": "imgs/plugin/icon",
   "URL": "https://github.com/Wheatlandchurch/SmartThings-streamdeckplugin",
   "UUID": "com.wheatland-community-church.smartthings",
-  "Version": "0.1.0",
+  "Version": "0.1.0.0",
   "OS": [
     {
       "Platform": "mac",
@@ -43,7 +43,7 @@
   "Nodejs": {
     "Version": "20"
   },
-  "Category": "SmartThings",
+  "Category": "SmartThings Automations",
   "CategoryIcon": "imgs/category/icon",
   "SDKVersion": 3
 }
