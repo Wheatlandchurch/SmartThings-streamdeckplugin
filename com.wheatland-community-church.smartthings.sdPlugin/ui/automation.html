@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>SmartThings Automation</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding: 12px; background: #1a1a1a; color: #f0f0f0; }
+    .panel { background: #202020; border: 1px solid #3a3a3a; border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+    .panel-title { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #d7d7d7; margin-bottom: 10px; }
+    .sdpi-item { margin-bottom: 12px; }
+    .sdpi-item-label { display: block; font-size: 12px; margin-bottom: 6px; color: #d0d0d0; }
+    input, select, button { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 4px; border: 1px solid #666; background: #2b2b2b; color: #fff; }
+    button { cursor: pointer; }
+    button.secondary { background: #333; }
+    button.primary { background: #2a5f8d; border-color: #4e84b6; }
+    .note { font-size: 11px; color: #b9c6cf; line-height: 1.4; margin-top: 6px; }
+    #status { margin-top: 10px; font-size: 12px; min-height: 18px; }
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: #2d2d2d; border: 1px solid #444; font-size: 11px; }
+    .success { color: #7bdc91; }
+    .error { color: #ff8b8b; }
+    .warning { color: #f7cf7c; }
+    .row { display: flex; gap: 8px; }
+    .row button { flex: 1; }
+    .credential-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .credential-pill { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; font-size: 11px; border: 1px solid #555; background: #2d2d2d; color: #dfeaf3; }
+    .credential-pill.ready { border-color: rgba(123, 220, 145, 0.8); color: #7bdc91; }
+    .credential-pill.missing { border-color: rgba(247, 207, 124, 0.8); color: #f7cf7c; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="panel-title">1. SmartThings app setup</div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="clientId">SmartThings client ID</label>
+      <input id="clientId" type="text" placeholder="Your SmartThings client ID" />
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="clientSecret">SmartThings client secret</label>
+      <input id="clientSecret" type="password" placeholder="Your SmartThings client secret" />
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="redirectUri">Redirect URI</label>
+      <input id="redirectUri" type="text" value="https://localhost" />
+    </div>
+
+    <div class="note">Open the authorization page to sign in to SmartThings and grant access to your automations.</div>
+    <div class="row" style="margin-top: 10px;">
+      <button id="authBtn" class="primary" type="button">Authorize</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">2. Access & location</div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="accessToken">Access token</label>
+      <input id="accessToken" type="password" placeholder="Paste SmartThings access token" />
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="refreshToken">Refresh token</label>
+      <input id="refreshToken" type="password" placeholder="Optional refresh token" />
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="locationId">Location ID</label>
+      <input id="locationId" type="text" placeholder="Optional location ID" />
+    </div>
+
+    <div class="row">
+      <button id="refreshTokenBtn" class="secondary" type="button">Refresh Token</button>
+      <button id="connectBtn" class="secondary" type="button">Test Connection</button>
+    </div>
+
+    <div id="credentialStatus" class="credential-summary" aria-live="polite"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">3. Automation selection</div>
+
+    <div class="row" style="margin-bottom: 12px;">
+      <button id="loadBtn" type="button">Load Automations</button>
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="automationId">Automation</label>
+      <select id="automationId">
+        <option value="">Select an automation</option>
+      </select>
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="automationName">Button label</label>
+      <input id="automationName" type="text" placeholder="e.g. Goodnight" />
+    </div>
+
+    <div id="status" class="status-badge warning">Ready to configure</div>
+  </div>
+
+  <script>
+    let websocket = null;
+    let uuid = null;
+    let settings = {};
+
+    function connectElgatoStreamDeckSocket(inPort, inUuid, inRegisterEvent, inInfo, inActionInfo) {
+      uuid = inUuid;
+      websocket = new WebSocket('ws://localhost:' + inPort);
+
+      websocket.onopen = function() {
+        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: uuid }));
+        loadSettingsFromAction(inActionInfo);
+        processAuthCallback();
+      };
+
+      websocket.onmessage = function(evt) {
+        const message = JSON.parse(evt.data);
+        if (message.event === 'didReceiveSettings') {
+          settings = message.payload.settings || {};
+          populateForm(settings);
+        }
+
+        if (message.payload && message.payload.event === 'authUrl') {
+          const authUrl = message.payload.authUrl;
+          if (authUrl) {
+            setStatus('success', 'Authorization opened. Complete the sign-in flow and return here.');
+            window.open(authUrl, '_blank');
+          }
+        }
+
+        if (message.payload && message.payload.event === 'tokenSaved') {
+          setStatus(message.payload.success ? 'success' : 'error', message.payload.message || 'Token status updated.');
+          if (message.payload.success) {
+            const accessToken = document.getElementById('accessToken');
+            const refreshToken = document.getElementById('refreshToken');
+            if (accessToken && accessToken.value.trim() === '') {
+              accessToken.value = settings.accessToken || '';
+            }
+            if (refreshToken && refreshToken.value.trim() === '') {
+              refreshToken.value = settings.refreshToken || '';
+            }
+            updateCredentialStatus();
+          }
+        }
+
+        if (message.payload && message.payload.event === 'automationList') {
+          if (!message.payload.success) {
+            setStatus('error', message.payload.message || 'Unable to load automations');
+            return;
+          }
+
+          const list = message.payload.automations || [];
+          const select = document.getElementById('automationId');
+          const selectedValue = select.value;
+          select.innerHTML = '<option value="">Select an automation</option>';
+
+          list.forEach((item) => {
+            const option = document.createElement('option');
+            option.value = item.id;
+            option.textContent = item.name || item.id;
+            if (selectedValue === item.id) {
+              option.selected = true;
+            }
+            select.appendChild(option);
+          });
+
+          setStatus('success', `${list.length} automation(s) loaded. Pick one to map to this button.`);
+        }
+
+        if (message.payload && message.payload.event === 'connectionTestResult') {
+          setStatus(message.payload.success ? 'success' : 'error', message.payload.message || 'Connection test finished.');
+        }
+      };
+    }
+
+    function setStatus(type, message) {
+      const element = document.getElementById('status');
+      element.className = 'status-badge ' + (type || 'warning');
+      element.textContent = message || 'Ready to configure';
+    }
+
+    function updateCredentialStatus() {
+      const clientId = document.getElementById('clientId').value.trim();
+      const clientSecret = document.getElementById('clientSecret').value.trim();
+      const accessToken = document.getElementById('accessToken').value.trim();
+      const refreshToken = document.getElementById('refreshToken').value.trim();
+      const summary = document.getElementById('credentialStatus');
+
+      const items = [
+        { label: 'App creds', ready: !!(clientId && clientSecret), value: !!(clientId && clientSecret) ? 'Saved' : 'Missing' },
+        { label: 'Access token', ready: !!accessToken, value: accessToken ? 'Saved' : 'Missing' },
+        { label: 'Refresh token', ready: !!refreshToken, value: refreshToken ? 'Saved' : 'Missing' }
+      ];
+
+      summary.innerHTML = items.map((item) => `
+        <span class="credential-pill ${item.ready ? 'ready' : 'missing'}">${item.label}: ${item.value}</span>
+      `).join('');
+    }
+
+    function loadSettingsFromAction(inActionInfo) {
+      const info = JSON.parse(inActionInfo || '{}');
+      settings = info.payload && info.payload.settings ? info.payload.settings : {};
+      populateForm(settings);
+    }
+
+    function populateForm(data) {
+      document.getElementById('clientId').value = data.clientId || '';
+      document.getElementById('clientSecret').value = data.clientSecret || '';
+      document.getElementById('redirectUri').value = data.redirectUri || 'https://localhost';
+      document.getElementById('accessToken').value = data.accessToken || '';
+      document.getElementById('refreshToken').value = data.refreshToken || '';
+      document.getElementById('locationId').value = data.locationId || '';
+      document.getElementById('automationName').value = data.automationName || '';
+      const automationId = document.getElementById('automationId');
+      const selected = data.automationId || '';
+      if (selected) {
+        const option = Array.from(automationId.options).find((o) => o.value === selected);
+        if (option) option.selected = true;
+      }
+      updateCredentialStatus();
+    }
+
+    function saveSettings() {
+      settings = {
+        clientId: document.getElementById('clientId').value.trim(),
+        clientSecret: document.getElementById('clientSecret').value.trim(),
+        redirectUri: document.getElementById('redirectUri').value.trim() || 'https://localhost',
+        accessToken: document.getElementById('accessToken').value.trim(),
+        refreshToken: document.getElementById('refreshToken').value.trim(),
+        locationId: document.getElementById('locationId').value.trim(),
+        automationId: document.getElementById('automationId').value,
+        automationName: document.getElementById('automationName').value.trim(),
+        baseUrl: 'https://api.smartthings.com/v1'
+      };
+
+      if (websocket) {
+        websocket.send(JSON.stringify({
+          event: 'setSettings',
+          context: uuid,
+          payload: settings
+        }));
+      }
+
+      updateCredentialStatus();
+    }
+
+    function authorize() {
+      const clientId = document.getElementById('clientId').value.trim();
+      const clientSecret = document.getElementById('clientSecret').value.trim();
+
+      if (!clientId || !clientSecret) {
+        setStatus('warning', 'Enter your SmartThings client ID and secret first.');
+        return;
+      }
+
+      const payload = {
+        action: 'authorize',
+        clientId,
+        clientSecret,
+        redirectUri: document.getElementById('redirectUri').value.trim() || 'https://localhost'
+      };
+
+      saveSettings();
+      setStatus('warning', 'Opening SmartThings authorization page...');
+      websocket.send(JSON.stringify({ event: 'sendToPlugin', context: uuid, payload }));
+    }
+
+    function loadAutomations() {
+      const accessToken = document.getElementById('accessToken').value.trim();
+      if (!accessToken) {
+        setStatus('warning', 'Paste an access token before loading automations.');
+        return;
+      }
+
+      const payload = {
+        action: 'loadAutomations',
+        accessToken,
+        locationId: document.getElementById('locationId').value.trim(),
+        baseUrl: 'https://api.smartthings.com/v1'
+      };
+
+      saveSettings();
+      setStatus('warning', 'Loading your SmartThings automations...');
+      websocket.send(JSON.stringify({ event: 'sendToPlugin', context: uuid, payload }));
+    }
+
+    function refreshToken() {
+      const refreshTokenValue = document.getElementById('refreshToken').value.trim();
+      const clientId = document.getElementById('clientId').value.trim();
+      const clientSecret = document.getElementById('clientSecret').value.trim();
+
+      if (!refreshTokenValue || !clientId || !clientSecret) {
+        setStatus('warning', 'Add your refresh token, client ID, and client secret before refreshing.');
+        return;
+      }
+
+      const payload = {
+        action: 'refreshToken',
+        refreshToken: refreshTokenValue,
+        clientId,
+        clientSecret,
+        redirectUri: document.getElementById('redirectUri').value.trim() || 'https://localhost'
+      };
+
+      saveSettings();
+      setStatus('warning', 'Refreshing SmartThings token...');
+      websocket.send(JSON.stringify({ event: 'sendToPlugin', context: uuid, payload }));
+    }
+
+    function testConnection() {
+      const accessToken = document.getElementById('accessToken').value.trim();
+      if (!accessToken) {
+        setStatus('warning', 'Paste your SmartThings access token before testing the connection.');
+        return;
+      }
+
+      const payload = {
+        action: 'testConnection',
+        accessToken,
+        locationId: document.getElementById('locationId').value.trim(),
+        baseUrl: 'https://api.smartthings.com/v1'
+      };
+
+      saveSettings();
+      setStatus('warning', 'Testing SmartThings connection...');
+      websocket.send(JSON.stringify({ event: 'sendToPlugin', context: uuid, payload }));
+    }
+
+    function processAuthCallback() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (!code || !websocket) {
+        return;
+      }
+
+      const payload = {
+        action: 'exchangeCode',
+        code,
+        clientId: document.getElementById('clientId').value.trim(),
+        clientSecret: document.getElementById('clientSecret').value.trim(),
+        redirectUri: document.getElementById('redirectUri').value.trim() || 'https://localhost'
+      };
+
+      saveSettings();
+      websocket.send(JSON.stringify({ event: 'sendToPlugin', context: uuid, payload }));
+      history.replaceState({}, '', window.location.pathname);
+    }
+
+    document.getElementById('clientId').addEventListener('change', saveSettings);
+    document.getElementById('clientSecret').addEventListener('change', saveSettings);
+    document.getElementById('redirectUri').addEventListener('change', saveSettings);
+    document.getElementById('accessToken').addEventListener('change', saveSettings);
+    document.getElementById('refreshToken').addEventListener('change', saveSettings);
+    document.getElementById('locationId').addEventListener('change', saveSettings);
+    document.getElementById('automationName').addEventListener('change', saveSettings);
+    document.getElementById('automationId').addEventListener('change', saveSettings);
+    document.getElementById('authBtn').addEventListener('click', authorize);
+    document.getElementById('loadBtn').addEventListener('click', loadAutomations);
+    document.getElementById('refreshTokenBtn').addEventListener('click', refreshToken);
+    document.getElementById('connectBtn').addEventListener('click', testConnection);
+  </script>
+</body>
+</html>

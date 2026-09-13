@@ -1,0 +1,49 @@
+{
+  "Actions": [
+    {
+      "Icon": "imgs/actions/automation/icon",
+      "Name": "Run Automation",
+      "PropertyInspectorPath": "ui/automation.html",
+      "States": [
+        {
+          "Image": "imgs/actions/automation/default",
+          "Name": "Ready"
+        },
+        {
+          "Image": "imgs/actions/automation/active",
+          "Name": "Triggered"
+        }
+      ],
+      "SupportedInMultiActions": false,
+      "Tooltip": "Run a selected SmartThings automation on demand from your Stream Deck.",
+      "UUID": "com.wheatland-community-church.smartthings.automation"
+    }
+  ],
+  "Author": "Wheatland Church",
+  "CodePath": "bin/plugin.js",
+  "Description": "Launch Samsung SmartThings automations directly from a Stream Deck button.",
+  "Name": "SmartThings Automations",
+  "Icon": "imgs/plugin/icon",
+  "URL": "https://github.com/Wheatlandchurch/SmartThings-streamdeckplugin",
+  "UUID": "com.wheatland-community-church.smartthings",
+  "Version": "0.1.0",
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "10.15"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Software": {
+    "MinimumVersion": "6.9"
+  },
+  "Nodejs": {
+    "Version": "20"
+  },
+  "Category": "SmartThings",
+  "CategoryIcon": "imgs/category/icon",
+  "SDKVersion": 3
+}
